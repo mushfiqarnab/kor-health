@@ -1,5 +1,5 @@
 export type CryptoSuite = "AES-256-GCM";
-export type EnvelopePurpose = "cloud_sync";
+export type EnvelopePurpose = "cloud_sync" | "local_keyring" | "keyring_backup";
 
 export interface AadV1 {
   readonly envelopeVersion: 1;
@@ -84,7 +84,13 @@ function assertValidAad(aad: AadV1): void {
     throw new Error("aad.keyVersion must be a positive integer");
   }
 
-  if (aad.purpose !== "cloud_sync") {
+  const supportedPurposes: readonly EnvelopePurpose[] = [
+    "cloud_sync",
+    "local_keyring",
+    "keyring_backup",
+  ];
+
+  if (!supportedPurposes.includes(aad.purpose)) {
     throw new Error("unsupported envelope purpose");
   }
 }
