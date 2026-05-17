@@ -45,6 +45,12 @@ const AES_GCM_IV_BYTES = 12;
 const AES_GCM_TAG_BYTES = 16;
 const AES_256_KEY_BYTES = 32;
 
+const SUPPORTED_PURPOSES: readonly EnvelopePurpose[] = [
+  "cloud_sync",
+  "local_keyring",
+  "keyring_backup",
+];
+
 function requireNonEmpty(value: string, fieldName: string): void {
   if (value.trim().length === 0) {
     throw new Error(`${fieldName} must not be empty`);
@@ -84,13 +90,7 @@ function assertValidAad(aad: AadV1): void {
     throw new Error("aad.keyVersion must be a positive integer");
   }
 
-  const supportedPurposes: readonly EnvelopePurpose[] = [
-    "cloud_sync",
-    "local_keyring",
-    "keyring_backup",
-  ];
-
-  if (!supportedPurposes.includes(aad.purpose)) {
+  if (!SUPPORTED_PURPOSES.includes(aad.purpose)) {
     throw new Error("unsupported envelope purpose");
   }
 }
@@ -125,8 +125,9 @@ function assertWellFormedEnvelope(envelope: SealedEnvelopeV1): void {
     envelope.tag.trim().length === 0 ||
     envelope.ciphertext.trim().length === 0
   ) {
-  throw new Error("malformed sealed envelope");
-}
+    throw new Error("malformed sealed envelope");
+  }
+
   assertValidAad(envelope.aad);
 
   if (envelope.keyScopeId !== envelope.aad.keyScopeId) {
@@ -234,6 +235,12 @@ function concatBytes(left: Uint8Array, right: Uint8Array): Uint8Array {
   return output;
 }
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 function splitCiphertextAndTag(encryptedBytes: Uint8Array): {
   ciphertextBytes: Uint8Array;
   tagBytes: Uint8Array;
@@ -268,7 +275,7 @@ async function importAesGcmKey(key: EncryptionKey): Promise<CryptoKey> {
 
   return getCrypto().subtle.importKey(
     "raw",
-    key.rawKeyBytes,
+    toArrayBuffer(key.rawKeyBytes),
     {
       name: "AES-GCM",
       length: 256,
@@ -296,33 +303,33 @@ export async function encryptToEnvelope(
   const encryptedBuffer = await cryptoApi.subtle.encrypt(
     {
       name: "AES-GCM",
-      iv,
-      additionalData: aadBytes,
+      iv: toArrayBuffer(iv),
+      additionalData: toArrayBuffer(aadBytes),
       tagLength: AES_GCM_TAG_BYTES * 8,
     },
     cryptoKey,
-    textToBytes(input.plaintext),
+    toArrayBuffer(textToBytes(input.plaintext)),
   );
 
   const encryptedBytes = new Uint8Array(encryptedBuffer);
   const { ciphertextBytes, tagBytes } = splitCiphertextAndTag(encryptedBytes);
 
-const frozenAad = Object.freeze({
-  ...input.aad,
-});
+  const frozenAad = Object.freeze({
+    ...input.aad,
+  });
 
-const envelope: SealedEnvelopeV1 = {
-  envelopeVersion: ENVELOPE_VERSION,
-  cryptoSuite: CRYPTO_SUITE,
-  keyScopeId: input.key.keyScopeId,
-  keyVersion: input.key.keyVersion,
-  iv: bytesToBase64(iv),
-  tag: bytesToBase64(tagBytes),
-  ciphertext: bytesToBase64(ciphertextBytes),
-  aad: frozenAad,
-};
+  const envelope: SealedEnvelopeV1 = {
+    envelopeVersion: ENVELOPE_VERSION,
+    cryptoSuite: CRYPTO_SUITE,
+    keyScopeId: input.key.keyScopeId,
+    keyVersion: input.key.keyVersion,
+    iv: bytesToBase64(iv),
+    tag: bytesToBase64(tagBytes),
+    ciphertext: bytesToBase64(ciphertextBytes),
+    aad: frozenAad,
+  };
 
-return Object.freeze(envelope);
+  return Object.freeze(envelope);
 }
 
 export async function decryptFromEnvelope(
@@ -354,12 +361,12 @@ export async function decryptFromEnvelope(
     const decryptedBuffer = await cryptoApi.subtle.decrypt(
       {
         name: "AES-GCM",
-        iv: ivBytes,
-        additionalData: aadBytes,
+        iv: toArrayBuffer(ivBytes),
+        additionalData: toArrayBuffer(aadBytes),
         tagLength: AES_GCM_TAG_BYTES * 8,
       },
       cryptoKey,
-      encryptedBytes,
+      toArrayBuffer(encryptedBytes),
     );
 
     return bytesToText(new Uint8Array(decryptedBuffer));
