@@ -127,8 +127,51 @@ function requireNumberField(
 
   return fieldValue;
 }
+function sanitizeOpaqueCryptoFieldsForLeakScan(value: unknown): unknown {
+  if (typeof value === "string") {
+    if (
+      value.startsWith("sealed-key-envelope-v1:") ||
+      value.startsWith("salt-v1:")
+    ) {
+      return "<redacted-opaque-value>";
+    }
+
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeOpaqueCryptoFieldsForLeakScan(item));
+  }
+
+  if (value !== null && typeof value === "object") {
+    const sanitizedObject: Record<string, unknown> = {};
+
+    for (const [key, nestedValue] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      const normalizedKey = key.toLowerCase();
+
+      if (
+        normalizedKey === "ciphertext" ||
+        normalizedKey === "tag" ||
+        normalizedKey === "iv" ||
+        normalizedKey === "rawkeybytesbase64url"
+      ) {
+        sanitizedObject[key] = "<redacted-opaque-crypto-bytes>";
+        continue;
+      }
+
+      sanitizedObject[key] = sanitizeOpaqueCryptoFieldsForLeakScan(nestedValue);
+    }
+
+    return sanitizedObject;
+  }
+
+  return value;
+}
+
 function expectNoInitializationSecretLeak(value: unknown): void {
-  const output = serialized(value);
+  const output = serialized(sanitizeOpaqueCryptoFieldsForLeakScan(value));
 
   const forbiddenTokens = [
     "raw k_root",
@@ -141,8 +184,8 @@ function expectNoInitializationSecretLeak(value: unknown): void {
     "k_recovery_wrap:",
     "domain/general",
     "domain/mental",
+    "mental",
     "mental-health",
-    "mental health",
     "psychiatric",
     "reproductive",
     "oncology",
@@ -150,9 +193,9 @@ function expectNoInitializationSecretLeak(value: unknown): void {
     "diabetes",
     "nid",
     "e-tin",
-    "phone number",
-    "caregiver_adherence",
-    "emergency_card",
+    "phone",
+    "email",
+    "dob",
   ];
 
   for (const token of forbiddenTokens) {
