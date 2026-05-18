@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertNoForbiddenSealedKeyMetadata,
+  deserializeSealedKeyEnvelope,
   sealRawKeyMaterial,
+  serializeSealedKeyEnvelope,
   unsealRawKeyMaterial,
   type RawKeyMaterial,
   type SealedKeyEnvelopeV1,
@@ -113,8 +115,8 @@ describe("AES-GCM sealed key envelope contract", () => {
     expect(envelope.sealPurpose).toBe("local_keyring_root");
 
     expect(envelope.iv.trim().length).toBeGreaterThan(0);
-    expect(envelope.tag.length).toBeGreaterThan(0);
-    expect(envelope.ciphertext.length).toBeGreaterThan(0);
+    expect(envelope.tag.trim().length).toBeGreaterThan(0);
+    expect(envelope.ciphertext.trim().length).toBeGreaterThan(0);
 
     expect(envelope.aad.sealPurpose).toBe("local_keyring_root");
     expect(envelope.aad.patientId).toBe("patient-001");
@@ -362,7 +364,8 @@ describe("AES-GCM sealed key envelope contract", () => {
       }),
     ).rejects.toThrow("sealed key authentication failed");
   });
-    it("rejects semantic sealed key scope identifiers even without other clinical labels", () => {
+
+  it("rejects semantic sealed key scope identifiers even without other clinical labels", () => {
     const unsafeEnvelope: SealedKeyEnvelopeV1 = {
       sealedKeyEnvelopeVersion: 1,
       cryptoSuite: "AES-256-GCM",
@@ -396,5 +399,51 @@ describe("AES-GCM sealed key envelope contract", () => {
     expect(() => assertNoForbiddenSealedKeyMetadata(unsafeEnvelope)).toThrow(
       "forbidden sealed key metadata",
     );
+  });
+
+  it("serializes and deserializes sealed key envelopes canonically", async () => {
+    const envelope = await sealLocalRoot();
+
+    const serializedEnvelope = serializeSealedKeyEnvelope(envelope);
+    const restoredEnvelope = deserializeSealedKeyEnvelope(serializedEnvelope);
+
+    expect(serializedEnvelope).toMatch(/^sealed-key-envelope-v1:/);
+    expect(restoredEnvelope).toEqual(envelope);
+    expect(Object.isFrozen(restoredEnvelope)).toBe(true);
+    expect(Object.isFrozen(restoredEnvelope.aad)).toBe(true);
+  });
+
+  it("rejects malformed serialized sealed key envelope strings", () => {
+    const malformedValues = [
+      "",
+      "sealed:root-version:1:scope:ks_01",
+      "sealed-key-envelope-v1:",
+      "sealed-key-envelope-v1:not-valid-base64url",
+      "sealed-key-envelope-v2:abc",
+      "plain-json-object",
+    ];
+
+    for (const value of malformedValues) {
+      expect(() => deserializeSealedKeyEnvelope(value)).toThrow(
+        "malformed sealed key envelope",
+      );
+    }
+  });
+
+  it("does not expose raw key material in serialized sealed key envelopes", async () => {
+    const envelope = await sealLocalRoot();
+    const serializedEnvelope = serializeSealedKeyEnvelope(envelope).toLowerCase();
+
+    expect(serializedEnvelope).toMatch(/^sealed-key-envelope-v1:/);
+    expect(serializedEnvelope).not.toContain("rawkeybytes");
+    expect(serializedEnvelope).not.toContain("k_root:");
+    expect(serializedEnvelope).not.toContain("k_local_unlock:");
+    expect(serializedEnvelope).not.toContain("k_recovery_wrap:");
+    expect(serializedEnvelope).not.toContain("domain/general");
+    expect(serializedEnvelope).not.toContain("mental");
+    expect(serializedEnvelope).not.toContain("psychiatric");
+    expect(serializedEnvelope).not.toContain("reproductive");
+    expect(serializedEnvelope).not.toContain("hiv");
+    expect(serializedEnvelope).not.toContain("diabetes");
   });
 });

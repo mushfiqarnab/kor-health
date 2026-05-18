@@ -63,6 +63,7 @@ interface UnsealRawKeyMaterialInput {
 
 const SEALED_KEY_ENVELOPE_VERSION = 1 as const;
 const CRYPTO_SUITE: SealedKeyCryptoSuite = "AES-256-GCM";
+const SEALED_KEY_ENVELOPE_SERIALIZATION_PREFIX = "sealed-key-envelope-v1:";
 const AES_GCM_IV_BYTES = 12;
 const AES_GCM_TAG_BYTES = 16;
 const AES_256_KEY_BYTES = 32;
@@ -73,7 +74,6 @@ const SUPPORTED_SEAL_PURPOSES: readonly SealPurpose[] = [
 ];
 
 const FORBIDDEN_SEALED_KEY_METADATA_TOKENS = [
-  "mental",
   "raw k_root",
   "raw k_master",
   "raw payload",
@@ -92,6 +92,7 @@ const FORBIDDEN_SEALED_KEY_METADATA_TOKENS = [
   "email",
   "dob",
   "date of birth",
+  "mental",
   "mental-health",
   "mental health",
   "psychiatric",
@@ -145,6 +146,10 @@ function assertSupportedSealPurpose(sealPurpose: SealPurpose): void {
 
 function textToBytes(value: string): Uint8Array {
   return new TextEncoder().encode(value);
+}
+
+function bytesToText(bytes: Uint8Array): string {
+  return new TextDecoder().decode(bytes);
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -208,6 +213,33 @@ function base64ToBytes(value: string): Uint8Array {
   }
 
   throw new Error("base64 decoding is unavailable");
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  return bytesToBase64(bytes)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/u, "");
+}
+
+function base64UrlToBytes(value: string): Uint8Array {
+  requireNonEmpty(value, "base64url value");
+
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) {
+    throw new Error("malformed sealed key envelope");
+  }
+
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "=",
+  );
+
+  try {
+    return base64ToBytes(padded);
+  } catch {
+    throw new Error("malformed sealed key envelope");
+  }
 }
 
 function concatBytes(left: Uint8Array, right: Uint8Array): Uint8Array {
@@ -279,6 +311,40 @@ function canonicalizeAad(aad: SealedKeyAadV1): string {
   };
 
   return JSON.stringify(canonicalAad);
+}
+
+function buildCanonicalSealedKeyEnvelope(
+  envelope: SealedKeyEnvelopeV1,
+): SealedKeyEnvelopeV1 {
+  return {
+    sealedKeyEnvelopeVersion: envelope.sealedKeyEnvelopeVersion,
+    cryptoSuite: envelope.cryptoSuite,
+    patientId: envelope.patientId,
+    keyringId: envelope.keyringId,
+    sealedKeyId: envelope.sealedKeyId,
+    sealedKeyType: envelope.sealedKeyType,
+    sealedKeyScopeId: envelope.sealedKeyScopeId,
+    sealedKeyVersion: envelope.sealedKeyVersion,
+    sealingKeyScopeId: envelope.sealingKeyScopeId,
+    sealingKeyVersion: envelope.sealingKeyVersion,
+    sealPurpose: envelope.sealPurpose,
+    iv: envelope.iv,
+    tag: envelope.tag,
+    ciphertext: envelope.ciphertext,
+    aad: {
+      sealedKeyEnvelopeVersion: envelope.aad.sealedKeyEnvelopeVersion,
+      cryptoSuite: envelope.aad.cryptoSuite,
+      patientId: envelope.aad.patientId,
+      keyringId: envelope.aad.keyringId,
+      sealedKeyId: envelope.aad.sealedKeyId,
+      sealedKeyType: envelope.aad.sealedKeyType,
+      sealedKeyScopeId: envelope.aad.sealedKeyScopeId,
+      sealedKeyVersion: envelope.aad.sealedKeyVersion,
+      sealingKeyScopeId: envelope.aad.sealingKeyScopeId,
+      sealingKeyVersion: envelope.aad.sealingKeyVersion,
+      sealPurpose: envelope.aad.sealPurpose,
+    },
+  };
 }
 
 function assertValidRawKeyMaterial(rawKeyMaterial: RawKeyMaterial): void {
@@ -366,6 +432,7 @@ function assertWellFormedEnvelope(envelope: SealedKeyEnvelopeV1): void {
   requireNonEmpty(envelope.sealedKeyId, "envelope.sealedKeyId");
   requireNonEmpty(envelope.sealedKeyScopeId, "envelope.sealedKeyScopeId");
   requireNonEmpty(envelope.sealingKeyScopeId, "envelope.sealingKeyScopeId");
+
   if (
     envelope.iv.trim().length === 0 ||
     envelope.tag.trim().length === 0 ||
@@ -474,8 +541,6 @@ export async function sealRawKeyMaterial(
     rawKeyCopy.fill(0);
   }
 
-  rawKeyCopy.fill(0);
-
   const encryptedBytes = new Uint8Array(encryptedBuffer);
   const { ciphertextBytes, tagBytes } = splitCiphertextAndTag(encryptedBytes);
 
@@ -562,5 +627,66 @@ export async function unsealRawKeyMaterial(
     }
 
     throw new Error("sealed key authentication failed");
+  }
+}
+
+export function serializeSealedKeyEnvelope(
+  envelope: SealedKeyEnvelopeV1,
+): string {
+  assertWellFormedEnvelope(envelope);
+
+  const canonicalEnvelope = buildCanonicalSealedKeyEnvelope(envelope);
+  const serializedEnvelopeBytes = textToBytes(JSON.stringify(canonicalEnvelope));
+
+  return `${SEALED_KEY_ENVELOPE_SERIALIZATION_PREFIX}${bytesToBase64Url(
+    serializedEnvelopeBytes,
+  )}`;
+}
+
+export function deserializeSealedKeyEnvelope(
+  value: string,
+): SealedKeyEnvelopeV1 {
+  if (!value.startsWith(SEALED_KEY_ENVELOPE_SERIALIZATION_PREFIX)) {
+    throw new Error("malformed sealed key envelope");
+  }
+
+  const encodedEnvelope = value.slice(
+    SEALED_KEY_ENVELOPE_SERIALIZATION_PREFIX.length,
+  );
+
+  if (encodedEnvelope.trim().length === 0) {
+    throw new Error("malformed sealed key envelope");
+  }
+
+  let parsedEnvelope: unknown;
+
+  try {
+    const envelopeBytes = base64UrlToBytes(encodedEnvelope);
+    const envelopeJson = bytesToText(envelopeBytes);
+    parsedEnvelope = JSON.parse(envelopeJson);
+  } catch {
+    throw new Error("malformed sealed key envelope");
+  }
+
+  try {
+    const candidateEnvelope = parsedEnvelope as SealedKeyEnvelopeV1;
+
+    assertWellFormedEnvelope(candidateEnvelope);
+
+    return Object.freeze({
+      ...candidateEnvelope,
+      aad: Object.freeze({
+        ...candidateEnvelope.aad,
+      }),
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "forbidden sealed key metadata"
+    ) {
+      throw error;
+    }
+
+    throw new Error("malformed sealed key envelope");
   }
 }
