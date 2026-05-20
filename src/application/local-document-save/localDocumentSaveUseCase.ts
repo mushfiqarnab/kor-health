@@ -1,14 +1,13 @@
-import {
-  isClinicalDocumentReferenceActive,
-  type ClinicalDocumentReference,
-} from "../../domain/clinical-document/clinicalDocumentReference";
+import type { ClinicalDocumentReference } from "../../domain/clinical-document/clinicalDocumentReference";
 
-import {
-  isLocalEncryptedDocumentPayloadActive,
-  type LocalEncryptedDocumentPayload,
-} from "../../domain/local-encrypted-payload/localEncryptedDocumentPayload";
+import type { LocalEncryptedDocumentPayload } from "../../domain/local-encrypted-payload/localEncryptedDocumentPayload";
 
 import type { LocalDocumentRepositoryPort } from "../local-document-repository/localDocumentRepositoryPort";
+
+import {
+  prepareLocalDocumentSave,
+  type LocalDocumentSavePreflightFailureReason,
+} from "./localDocumentSavePreflight";
 
 export interface SaveLocalDocumentReferencesInput {
   readonly repository: LocalDocumentRepositoryPort;
@@ -21,46 +20,46 @@ export interface SaveLocalDocumentReferencesResult {
   readonly savedLocalEncryptedDocumentPayload: LocalEncryptedDocumentPayload;
 }
 
-function assertPatientIdsMatch(input: SaveLocalDocumentReferencesInput): void {
-  if (
-    input.clinicalDocumentReference.patientId !==
-    input.localEncryptedDocumentPayload.patientId
-  ) {
-    throw new Error(
-      "clinical document reference and encrypted payload patientId must match",
-    );
+function toSavePreflightErrorMessage(
+  reason: LocalDocumentSavePreflightFailureReason,
+): string {
+  if (reason === "patient_id_mismatch") {
+    return "clinical document reference and encrypted payload patientId must match";
   }
+
+  if (reason === "encrypted_payload_ref_mismatch") {
+    return "clinical document reference encryptedPayloadRef must match encrypted payload payloadId";
+  }
+
+  if (reason === "clinical_document_reference_inactive") {
+    return "clinical document reference must be active";
+  }
+
+  if (reason === "local_encrypted_document_payload_inactive") {
+    return "local encrypted document payload must be active";
+  }
+
+  const exhaustiveReason: never = reason;
+  return exhaustiveReason;
 }
 
-function assertPayloadReferenceMatches(
+function assertLocalDocumentSavePreflightReady(
   input: SaveLocalDocumentReferencesInput,
 ): void {
-  if (
-    input.clinicalDocumentReference.encryptedPayloadRef !==
-    input.localEncryptedDocumentPayload.payloadId
-  ) {
-    throw new Error(
-      "clinical document reference encryptedPayloadRef must match encrypted payload payloadId",
-    );
-  }
-}
+  const decision = prepareLocalDocumentSave({
+    clinicalDocumentReference: input.clinicalDocumentReference,
+    localEncryptedDocumentPayload: input.localEncryptedDocumentPayload,
+  });
 
-function assertReferencesAreActive(input: SaveLocalDocumentReferencesInput): void {
-  if (!isClinicalDocumentReferenceActive(input.clinicalDocumentReference)) {
-    throw new Error("clinical document reference must be active");
-  }
-
-  if (!isLocalEncryptedDocumentPayloadActive(input.localEncryptedDocumentPayload)) {
-    throw new Error("local encrypted document payload must be active");
+  if (!decision.ready) {
+    throw new Error(toSavePreflightErrorMessage(decision.reason));
   }
 }
 
 export async function saveLocalDocumentReferences(
   input: SaveLocalDocumentReferencesInput,
 ): Promise<SaveLocalDocumentReferencesResult> {
-  assertPatientIdsMatch(input);
-  assertPayloadReferenceMatches(input);
-  assertReferencesAreActive(input);
+  assertLocalDocumentSavePreflightReady(input);
 
   const savedLocalEncryptedDocumentPayload =
     await input.repository.saveLocalEncryptedDocumentPayload(

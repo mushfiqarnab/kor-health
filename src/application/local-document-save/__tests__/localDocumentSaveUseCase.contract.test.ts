@@ -347,8 +347,11 @@ describe("Local document save use case contract", () => {
     );
     const source = readFileSync(sourcePath, "utf8").toLowerCase();
 
-    expect(source).toContain("isclinicaldocumentreferenceactive");
-    expect(source).toContain("islocalencrypteddocumentpayloadactive");
+    expect(source).toContain("preparelocaldocumentsave");
+    expect(source).toContain("localdocumentsavepreflightfailurereason");
+    expect(source).toContain("./localdocumentsavepreflight");
+    expect(source).not.toContain("isclinicaldocumentreferenceactive");
+    expect(source).not.toContain("islocalencrypteddocumentpayloadactive");
     expect(source).not.toContain("revokedatepochms");
     expect(source).not.toContain("deletedatepochms");
 
@@ -423,3 +426,4 @@ describe("Local document save use case contract", () => {
     }
   });
 });
+
