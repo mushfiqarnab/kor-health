@@ -129,9 +129,12 @@ describe("Local document save use case contract", () => {
     });
 
     expect(result).toEqual({
+      status: "completed",
       savedClinicalDocumentReference: clinicalDocumentReference,
       savedLocalEncryptedDocumentPayload: localEncryptedDocumentPayload,
     });
+
+    expect(Object.isFrozen(result)).toBe(true);
 
     await expect(
       repository.getClinicalDocumentReferenceByReferenceId(
@@ -426,4 +429,5 @@ describe("Local document save use case contract", () => {
     }
   });
 });
+
 

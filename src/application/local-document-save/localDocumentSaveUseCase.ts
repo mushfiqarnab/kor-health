@@ -9,15 +9,15 @@ import {
   type LocalDocumentSavePreflightFailureReason,
 } from "./localDocumentSavePreflight";
 
+import {
+  createCompletedLocalDocumentSaveResult,
+  type LocalDocumentSaveResult,
+} from "./localDocumentSaveResult";
+
 export interface SaveLocalDocumentReferencesInput {
   readonly repository: LocalDocumentRepositoryPort;
   readonly clinicalDocumentReference: ClinicalDocumentReference;
   readonly localEncryptedDocumentPayload: LocalEncryptedDocumentPayload;
-}
-
-export interface SaveLocalDocumentReferencesResult {
-  readonly savedClinicalDocumentReference: ClinicalDocumentReference;
-  readonly savedLocalEncryptedDocumentPayload: LocalEncryptedDocumentPayload;
 }
 
 function toSavePreflightErrorMessage(
@@ -58,7 +58,7 @@ function assertLocalDocumentSavePreflightReady(
 
 export async function saveLocalDocumentReferences(
   input: SaveLocalDocumentReferencesInput,
-): Promise<SaveLocalDocumentReferencesResult> {
+): Promise<LocalDocumentSaveResult> {
   assertLocalDocumentSavePreflightReady(input);
 
   const savedLocalEncryptedDocumentPayload =
@@ -71,8 +71,8 @@ export async function saveLocalDocumentReferences(
       input.clinicalDocumentReference,
     );
 
-  return {
+  return createCompletedLocalDocumentSaveResult({
     savedClinicalDocumentReference,
     savedLocalEncryptedDocumentPayload,
-  };
+  });
 }
