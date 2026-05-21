@@ -13,20 +13,20 @@ function readProjectState(): string {
 }
 
 describe("Project KOr state ledger contract", () => {
-  it("records the current locked repository state without relying on chat memory", () => {
+  it("records the current locked repository state through Slice 32 without relying on chat memory", () => {
     const state = readProjectState();
 
     expect(state).toContain("# Project KOr State Ledger");
     expect(state).toContain("Branch: main");
-    expect(state).toContain("Locked slices: Slice 8 through Slice 30");
+    expect(state).toContain("Locked slices: Slice 8 through Slice 32");
     expect(state).toContain(
-      "Latest locked commit: a7926c1 feat: add local document save outcome wrapper",
+      "Latest locked commit: 6c7899a test: add source boundary scan script",
     );
-    expect(state).toContain("Current test state: 31 test files, 468 tests");
+    expect(state).toContain("Current test state: 33 test files, 481 tests");
     expect(state).toContain("Working tree: clean");
     expect(state).toContain("Remote: up to date with origin/main");
     expect(state).toContain(
-      "Latest ADR: docs/adr/0030-local-document-save-outcome-wrapper.md",
+      "Latest ADR: docs/adr/0032-source-boundary-scan-script.md",
     );
   });
 
@@ -67,7 +67,7 @@ describe("Project KOr state ledger contract", () => {
     }
   });
 
-  it("records what has actually been built through Slice 30 without claiming unavailable infrastructure", () => {
+  it("records what has actually been built through Slice 32 without claiming unavailable infrastructure", () => {
     const state = readProjectState();
 
     const requiredBuiltTokens = [
@@ -99,6 +99,8 @@ describe("Project KOr state ledger contract", () => {
       "local document save result type",
       "local document save outcome boundary",
       "local document save outcome wrapper",
+      "Project KOr state ledger",
+      "source boundary scan script",
     ];
 
     for (const token of requiredBuiltTokens) {
@@ -145,14 +147,14 @@ describe("Project KOr state ledger contract", () => {
     }
   });
 
-  it("records the next candidate slices without making them active or implemented", () => {
+  it("records the next candidate slices after Slice 33 without making them active or implemented", () => {
     const state = readProjectState();
 
     const candidateTokens = [
-      "Candidate Slice 32: Source Boundary Scan Script",
-      "Candidate Slice 32: Local Document Repository Error Classification Decision",
-      "Candidate Slice 32: Local Document Mutation Log Domain",
-      "Candidate Slice 32: Local Persistence Readiness Decision",
+      "Candidate Slice 34: Local Document Repository Error Classification Decision",
+      "Candidate Slice 34: Local Document Mutation Log Domain",
+      "Candidate Slice 34: Local Persistence Readiness Decision",
+      "Candidate Slice 34: Project KOr Architecture Laws Documentation",
     ];
 
     for (const token of candidateTokens) {
@@ -160,10 +162,11 @@ describe("Project KOr state ledger contract", () => {
     }
 
     expect(state).toContain(
-      "Only one candidate may become active after Slice 31 is locked.",
+      "Only one candidate may become active after Slice 33 is locked.",
     );
-    expect(state).not.toContain("Slice 32 is implemented");
-    expect(state).not.toContain("Slice 32 is locked");
+    expect(state).not.toContain("Candidate Slice 32:");
+    expect(state).not.toContain("Slice 34 is implemented");
+    expect(state).not.toContain("Slice 34 is locked");
   });
 
   it("keeps the state ledger concise, operational, and free from placeholder architecture", () => {
@@ -185,6 +188,6 @@ describe("Project KOr state ledger contract", () => {
     }
 
     expect(state.length).toBeGreaterThan(2_500);
-    expect(state.length).toBeLessThan(16_000);
+    expect(state.length).toBeLessThan(17_000);
   });
 });

@@ -10,17 +10,17 @@ This file records the current engineering state of Project KOr inside the reposi
 
 Branch: main
 
-Locked slices: Slice 8 through Slice 30
+Locked slices: Slice 8 through Slice 32
 
-Latest locked commit: a7926c1 feat: add local document save outcome wrapper
+Latest locked commit: 6c7899a test: add source boundary scan script
 
-Current test state: 31 test files, 468 tests
+Current test state: 33 test files, 481 tests
 
 Working tree: clean
 
 Remote: up to date with origin/main
 
-Latest ADR: docs/adr/0030-local-document-save-outcome-wrapper.md
+Latest ADR: docs/adr/0032-source-boundary-scan-script.md
 
 ## Permanent Product Laws
 
@@ -77,7 +77,7 @@ Every slice must follow:
 
 A slice is not complete until tests, validation, documentation decision, commit guidance, push, and clean repo evidence are complete.
 
-## Built Foundations Through Slice 30
+## Built Foundations Through Slice 32
 
 - Medication adherence domain.
 - AES-GCM envelope adapter.
@@ -109,6 +109,8 @@ A slice is not complete until tests, validation, documentation decision, commit 
 - local document save result type.
 - local document save outcome boundary.
 - local document save outcome wrapper.
+- Project KOr state ledger.
+- source boundary scan script.
 
 ## Current Local Document Save Architecture
 
@@ -125,6 +127,14 @@ The local document save path now has these application-layer boundaries:
 - save outcome wrapper returns rejected outcomes for preflight rejection while preserving repository error propagation.
 
 The outcome wrapper is internal application output. It is not a log-safe, audit-safe, sync-safe, cloud-safe, notification-safe, or display-safe receipt.
+
+## Current Validation Tooling
+
+The source boundary scan script exists as repository tooling only.
+
+It reads one source file, checks required tokens, checks forbidden tokens, prints explicit validation findings, and exits non-zero when a violation exists.
+
+The script is not runtime code. It is not application logic. It is not domain logic. It is not infrastructure logic. It does not replace human architecture review, ADRs, or tests.
 
 ## Built Access and Sharing Chain
 
@@ -208,27 +218,27 @@ Do not introduce cloud upload yet.
 
 Do not introduce readable clinical metadata yet.
 
-## Current Candidate Slice 32 Options
+## Current Candidate Slice 34 Options
 
-Candidate Slice 32: Source Boundary Scan Script
+Candidate Slice 34: Local Document Repository Error Classification Decision
 
-Candidate Slice 32: Local Document Repository Error Classification Decision
+Candidate Slice 34: Local Document Mutation Log Domain
 
-Candidate Slice 32: Local Document Mutation Log Domain
+Candidate Slice 34: Local Persistence Readiness Decision
 
-Candidate Slice 32: Local Persistence Readiness Decision
+Candidate Slice 34: Project KOr Architecture Laws Documentation
 
-Only one candidate may become active after Slice 31 is locked.
+Only one candidate may become active after Slice 33 is locked.
 
 The selected candidate must be justified by current repository state and must preserve all architecture laws.
 
 ## Immediate Next Gate
 
-After Slice 31 is locked, choose exactly one Slice 32 target.
+After Slice 33 is locked, choose exactly one Slice 34 target.
 
-The default recommendation is Project KOr Source Boundary Scan Script if repeated manual scans are slowing validation.
+The default recommendation is Local Document Repository Error Classification Decision if the local save path needs clearer internal failure handling before durable persistence.
 
-The alternative recommendation is Local Document Repository Error Classification Decision if the local save path needs clearer internal failure handling before durable persistence.
+The alternative recommendation is Local Document Mutation Log Domain if the next foundation should prepare for future sync without introducing sync, storage, cloud, or database infrastructure.
 
 ## State Ledger Update Rule
 
