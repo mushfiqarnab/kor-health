@@ -10,6 +10,14 @@ import {
 } from "./localDocumentSavePreflight";
 
 import {
+  LOCAL_DOCUMENT_REPOSITORY_FAILURE_PAYLOAD_SAVE_PHASE,
+  LOCAL_DOCUMENT_REPOSITORY_FAILURE_REFERENCE_SAVE_PHASE,
+  type LocalDocumentRepositoryFailureClassification,
+} from "./localDocumentRepositoryFailureClassification";
+
+import { classifyAndRethrowLocalDocumentRepositoryFailure } from "./localDocumentRepositoryFailureRethrow";
+
+import {
   createCompletedLocalDocumentSaveResult,
   type LocalDocumentSaveResult,
 } from "./localDocumentSaveResult";
@@ -18,6 +26,9 @@ export interface SaveLocalDocumentReferencesInput {
   readonly repository: LocalDocumentRepositoryPort;
   readonly clinicalDocumentReference: ClinicalDocumentReference;
   readonly localEncryptedDocumentPayload: LocalEncryptedDocumentPayload;
+  readonly onRepositoryFailureClassification?: (
+    classification: LocalDocumentRepositoryFailureClassification,
+  ) => void;
 }
 
 function toSavePreflightErrorMessage(
@@ -61,14 +72,24 @@ export async function saveLocalDocumentReferences(
 ): Promise<LocalDocumentSaveResult> {
   assertLocalDocumentSavePreflightReady(input);
 
-  const savedLocalEncryptedDocumentPayload =
-    await input.repository.saveLocalEncryptedDocumentPayload(
-      input.localEncryptedDocumentPayload,
+  const savedLocalEncryptedDocumentPayload = await input.repository
+    .saveLocalEncryptedDocumentPayload(input.localEncryptedDocumentPayload)
+    .catch((cause: unknown) =>
+      classifyAndRethrowLocalDocumentRepositoryFailure({
+        phase: LOCAL_DOCUMENT_REPOSITORY_FAILURE_PAYLOAD_SAVE_PHASE,
+        cause,
+        onClassification: input.onRepositoryFailureClassification,
+      }),
     );
 
-  const savedClinicalDocumentReference =
-    await input.repository.saveClinicalDocumentReference(
-      input.clinicalDocumentReference,
+  const savedClinicalDocumentReference = await input.repository
+    .saveClinicalDocumentReference(input.clinicalDocumentReference)
+    .catch((cause: unknown) =>
+      classifyAndRethrowLocalDocumentRepositoryFailure({
+        phase: LOCAL_DOCUMENT_REPOSITORY_FAILURE_REFERENCE_SAVE_PHASE,
+        cause,
+        onClassification: input.onRepositoryFailureClassification,
+      }),
     );
 
   return createCompletedLocalDocumentSaveResult({
@@ -76,3 +97,5 @@ export async function saveLocalDocumentReferences(
     savedLocalEncryptedDocumentPayload,
   });
 }
+
+
