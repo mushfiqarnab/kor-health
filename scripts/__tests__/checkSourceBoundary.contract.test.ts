@@ -5,6 +5,8 @@ import { spawnSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
+const POWERSHELL_BOUNDARY_SCAN_TEST_TIMEOUT_MS = 15_000;
+
 const scriptPath = resolve(process.cwd(), "scripts/check-source-boundary.ps1");
 
 function createTempSource(content: string): string {
@@ -50,6 +52,48 @@ function runBoundaryScan(args: readonly string[]): {
 }
 
 describe("Source boundary scan script contract", () => {
+  it("declares an explicit timeout budget for PowerShell-spawning boundary scan tests", () => {
+    const source = readFileSync(
+      resolve(
+        process.cwd(),
+        "scripts/__tests__/checkSourceBoundary.contract.test.ts",
+      ),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "const POWERSHELL_BOUNDARY_SCAN_TEST_TIMEOUT_MS = 15_000;",
+    );
+
+    const powerShellSpawningTestNames = [
+      "exits successfully with no output when required tokens exist and forbidden tokens are absent",
+      "prints MISSING_REQUIRED and exits non-zero when required tokens are absent",
+      "prints FOUND_FORBIDDEN and exits non-zero when forbidden tokens are present",
+      "can report required and forbidden failures in the same run",
+      "fails closed when SourcePath is missing or unreadable",
+    ];
+
+    for (const testName of powerShellSpawningTestNames) {
+      expect(source).toContain(`"${testName}",`);
+    }
+
+    const timeoutArgument = [
+      "}, POWERSHELL_BOUNDARY_SCAN_TEST_TIMEOUT_MS",
+      ");",
+    ].join("");
+
+    const timeoutArgumentCount =
+      source.split(timeoutArgument).length - 1;
+
+    expect(timeoutArgumentCount).toBe(powerShellSpawningTestNames.length);
+
+    expect(source).not.toMatch(/\bit\.concurrent\s*\(/u);
+    expect(source).not.toMatch(/\bdescribe\.concurrent\s*\(/u);
+    expect(source).not.toMatch(/\bsetTimeout\s*\(/u);
+    expect(source).not.toMatch(/\bvi\.setConfig\s*\(/u);
+    expect(source).not.toMatch(/\bvitest\.setTimeout\s*\(/u);
+  });
+
   it("exists as a PowerShell validation script without modifying package scripts", () => {
     const source = readFileSync(scriptPath, "utf8");
 
@@ -97,7 +141,7 @@ describe("Source boundary scan script contract", () => {
     } finally {
       cleanupTempSource(sourcePath);
     }
-  });
+  }, POWERSHELL_BOUNDARY_SCAN_TEST_TIMEOUT_MS);
 
   it("prints MISSING_REQUIRED and exits non-zero when required tokens are absent", () => {
     const sourcePath = createTempSource(`
@@ -124,7 +168,7 @@ describe("Source boundary scan script contract", () => {
     } finally {
       cleanupTempSource(sourcePath);
     }
-  });
+  }, POWERSHELL_BOUNDARY_SCAN_TEST_TIMEOUT_MS);
 
   it("prints FOUND_FORBIDDEN and exits non-zero when forbidden tokens are present", () => {
     const sourcePath = createTempSource(`
@@ -150,7 +194,7 @@ describe("Source boundary scan script contract", () => {
     } finally {
       cleanupTempSource(sourcePath);
     }
-  });
+  }, POWERSHELL_BOUNDARY_SCAN_TEST_TIMEOUT_MS);
 
   it("can report required and forbidden failures in the same run", () => {
     const sourcePath = createTempSource(`
@@ -176,7 +220,7 @@ describe("Source boundary scan script contract", () => {
     } finally {
       cleanupTempSource(sourcePath);
     }
-  });
+  }, POWERSHELL_BOUNDARY_SCAN_TEST_TIMEOUT_MS);
 
   it("fails closed when SourcePath is missing or unreadable", () => {
     const missingPath = resolve(
@@ -195,7 +239,7 @@ describe("Source boundary scan script contract", () => {
     expect(result.stdout).toContain("SOURCE_UNREADABLE:");
     expect(result.stdout).toContain(missingPath);
     expect(result.stderr).toBe("");
-  });
+  }, POWERSHELL_BOUNDARY_SCAN_TEST_TIMEOUT_MS);
 
   it("keeps the script free from runtime infrastructure, cloud, sync, AI, OCR, UI, and clinical metadata assumptions", () => {
     const source = readFileSync(scriptPath, "utf8").toLowerCase();
@@ -234,3 +278,7 @@ describe("Source boundary scan script contract", () => {
     }
   });
 });
+
+
+
+
